@@ -6,18 +6,32 @@ import streamlit.components.v1 as components
 from streamlit_extras.stylable_container import stylable_container
 import pandas as pd 
 import mne
+import google.generativeai as genai
+import streamlit as st
 import numpy as np
 import tempfile
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+from imblearn.over_sampling import SMOTE
 from mne.preprocessing import ICA
+import pickle
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+import pandas as pd
+from collections import Counter
+import numpy as np
 import matplotlib.pyplot as plt
 import io
 import os
+import pickle
+import google.generativeai as genai
+import streamlit as st
+
 
 page_theme = """
 <style>
 [data-testid="stAppViewContainer"] {
-background-image: url("https://static.vecteezy.com/system/resources/previews/000/678/532/original/neon-colors-blur-background.jpg");
+background-image: url("https://images.hdqwalls.com/wallpapers/abstract-simple-background-4k-lp.jpg");
 background-size: 85%;
 background-position: right;
 background-repeat: repeat;
@@ -40,17 +54,32 @@ align-items: stretch;
 img {border-radius: 10px;}
 }
 
-# [data-testid="stText"]{
-background-color: #FFFACD;
-padding: 0.5em;
-margin-top: 10px;
+[data-testid="stBottomBlockContainer"]{
+padding: 2px;   
 border-radius: 1em;
+}
+
+[data-testid="stChatMessage"]{
+background-color: #FFFACD;
+padding: 1em;
+margin-top: 10px;
+border-radius: 0.5em;
 word-wrap: break-word; /* Tự động xuống dòng nếu từ quá dài */
 overflow: hidden; /* Ẩn phần tràn ra ngoài */
 text-align: justify; /* Căn chỉnh văn bản để fit vào hộp */
 font-weight: bold; /* In đậm phông chữ */
 font-family: "Times New Roman", Times, serif;
 font-size: 16px
+}
+
+[data-testid="stBottom"]{
+background-color: #000000;
+}
+# [data-testid="stText"]{
+background-color: #FFFACD;
+padding: 0.5em;
+margin-top: 10px;
+border-radius: 1em;
 }
 
 [data-testid="stMarkdown"]{
@@ -332,6 +361,7 @@ if selected == "Upload":
                 raw = mne.io.read_raw_gdf(tmp_file_path, preload=True, verbose=0).crop(tmin=30, tmax=None)
             else:
                 raise ValueError("Invalid file format")
+            
         # finally:
         #     os.remove(tmp_file_path)
         except Exception as e:
@@ -466,7 +496,7 @@ if selected == "Visualize":
 
     st.markdown(styl, unsafe_allow_html=True)
     
-    st.title(" Data Visualize ")
+    st.title("Data Visualize")
     
     st.markdown(
     """
@@ -477,8 +507,9 @@ if selected == "Visualize":
     </div>
     """,
     unsafe_allow_html=True
-)   
-        # Check if "Clear Cache" button is clicked
+    )   
+    
+    # Check if "Clear Cache" button is clicked
     if st.button("Clear Cache"):
         # Clear all cached functions and data
         st.cache_data.clear()
@@ -491,17 +522,17 @@ if selected == "Visualize":
         st.session_state.source_fig = None
         
         st.success("Cache cleared successfully!") 
+    
     # Function to process and plot ICA components and sources
     @st.cache_data
     def process_and_plot_ICA(_raw_data):
-        
         try:
             ica = ICA(n_components=5, method="fastica", random_state=32, max_iter="auto")
             ica.fit(_raw_data)
             _raw_data = ica.apply(_raw_data)
 
             # Plot the ICA components
-            com_fig = ica.plot_components(show=False)
+            com_fig = ica.plot_components(show=True)
             st.pyplot(com_fig)
 
             # Scale and plot the ICA sources manually
@@ -543,34 +574,52 @@ if selected == "Visualize":
             raw = st.session_state.uploaded_files[file.name]
 
             # Plot the raw data without displaying it immediately
-            fig = raw.plot(scalings=dict(eeg= 600000e-5), show=False,show_scrollbars=True)
+            fig = raw.plot(start=5,
+                                duration=10,
+                                color="black",
+                                scalings=dict(eeg=600000e-5), show=True, show_scrollbars=True)
             # Resize the figure
             fig.set_size_inches(12, 8)
             # Display the figure using Streamlit
             st.pyplot(fig)
+            
+            
+            st.markdown(
+                """
+                <div style='margin-top: 100px; background-color: #000000; padding: 5px; border-radius: 30px;'>
+                    <h1 style='color: #FFA500; text-align: center; margin-top: 40px;'>
+                    Raw data after ICA
+                    </h1>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            
+            # Process and plot ICA components and sources
+            process_and_plot_ICA(raw)
             
         else:
             st.error("No file uploaded. Please upload a file first.")
     else:
         st.error("No file uploaded. Please upload a file first.")    
             
-    # Markdown section for indicating raw data after ICA
-    st.markdown(
-        """
-        <div style='margin-top: 100px; background-color: #000000; padding: 5px; border-radius: 30px;'>
-            <h1 style='color: #FFA500; text-align: center; margin-top: 40px;'>
-            Raw data after ICA
-            </h1>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    # # Markdown section for indicating raw data after ICA
+    # st.markdown(
+    #     """
+    #     <div style='margin-top: 100px; background-color: #000000; padding: 5px; border-radius: 30px;'>
+    #         <h1 style='color: #FFA500; text-align: center; margin-top: 40px;'>
+    #         Raw data after ICA
+    #         </h1>
+    #     </div>
+    #     """,
+    #     unsafe_allow_html=True
+    # )
 
-    # Check if processed data and figures are available in session state
-    if 'processed_data' in st.session_state and 'com_fig' in st.session_state and 'source_fig' in st.session_state:
-        # Display ICA components and sources from session state
-        st.pyplot(st.session_state.com_fig)
-        st.pyplot(st.session_state.source_fig)
+    # # Check if processed data and figures are available in session state
+    # if 'processed_data' in st.session_state and 'com_fig' in st.session_state and 'source_fig' in st.session_state:
+    #     # Display ICA components and sources from session state
+    #     st.pyplot(st.session_state.com_fig)
+    #     st.pyplot(st.session_state.source_fig)
         
     # Markdown section for indicating spectral density
     st.markdown(
@@ -593,7 +642,7 @@ if selected == "Visualize":
 
             try:  
                 spectrum = raw.compute_psd()
-                img = spectrum.plot(average=True, picks="data", exclude="bads", amplitude=False)
+                img = spectrum.plot(average=True, picks="data", exclude="bads", amplitude=True)
                 st.pyplot(img)
                 
             except Exception as e:
@@ -602,8 +651,429 @@ if selected == "Visualize":
         else:
             st.error("No file uploaded. Please upload a file first.")
             
+            
+            
 if selected == "Analysis":
     st.title("Here are your results")
-    
+
+    @st.cache_data
+    def process_eeg_data():
+        raw = st.session_state.uploaded_files[list(st.session_state.uploaded_files.keys())[0]]
+
+        # Create fixed-length events and epochs
+        events = mne.make_fixed_length_events(raw, duration=30. , overlap=3)
+        
+        tmax = 30.0 - 1.0 / raw.info['sfreq']  # tmax is included
+        
+        # epochs = mne.make_fixed_length_epochs(raw, duration=30.0, overlap=3, preload=True)
+        # Define tmin and tmax
+        
+        # event_id =  {
+        #     'SLEEP-REM':1,
+        #     'SLEEP-N1':2,
+        #     'SLEEP-N2':3,
+        #     'SLEEP-N3':4}
+
+        # Create epochs using the manually defined tmin and tmax
+        epochs = mne.Epochs(raw, events = events, event_id = None, tmin=0. , tmax=tmax, baseline=(0.5, 30.0), preload=True)
+        
+        # Apply baseline correction
+        epochs.apply_baseline(baseline=(0.5, 30.0))
+
+        # Apply bandpass filter
+        epochs.filter(0.5, 30, picks=['eeg'])
+        
+        spectrum = epochs.compute_psd()
+        
+        img = spectrum.plot(average=True, picks="data", exclude="bads", amplitude=True, spatial_colors=True)
+        
+        st.pyplot(img) 
+
+        # noise_cov = mne.compute_raw_covariance(raw, tmin=0.5, tmax=None) 
+        
+        # noise_cov_baseline = mne.compute_covariance(epochs, tmax=None)
+        
+        # fig1 = noise_cov.plot(raw.info, proj=False)
+        
+        # st.pyplot(fig1) 
+        
+        # fig2 = noise_cov_baseline.plot(epochs.info, proj=False)
+        
+        # st.pyplot(fig2)
+        
+        # Compute the evoked response
+        evoked = epochs.average()
+
+        # Compute the power spectral density (PSD)
+        evk_spectrum = evoked.compute_psd()
+
+        # Define the frequency bands
+        bands = {
+            'Delta (0-4 Hz)': (0, 4), 
+            'Theta (4-8 Hz)': (4, 8),
+            'Alpha (8-12 Hz)': (8, 12), 
+            'Beta (12-30 Hz)': (12, 30),
+            'Gamma (30-45 Hz)': (30, 45)
+        }
+
+        # Plot the topomap and extract the figure
+        topomap_fig = evk_spectrum.plot_topomap(bands=bands, normalize=True, ch_type="eeg", outlines='head')
+
+        # Display the topomap figure in Streamlit
+        st.pyplot(topomap_fig)
+
+        # # Plot the image and extract the figure
+        # image_fig = epochs.plot_image(picks="eeg", combine="median")[-1]
+
+        # # Display the image figure in Streamlit
+        # st.pyplot(image_fig)
+        
+        def bin_power_spectrum_1hz(psd, freqs):
+            freqs_1hz_inc = list(range(1, 31))
+            psds_binned_1hz = []
+            curr_bin_freq = 1
+            curr_bin_sum = 0
+            curr_bin_size = 0
+
+            for f in range(len(freqs)):
+                if int(freqs[f]) >= curr_bin_freq:
+                    psds_binned_1hz.append(curr_bin_sum / curr_bin_size if curr_bin_size > 0 else 0)
+                    curr_bin_sum = 0
+                    curr_bin_size = 0
+                    curr_bin_freq += 1
+
+                curr_bin_sum += psd[f]
+                curr_bin_size += 1
+
+            psds_binned_1hz.append(curr_bin_sum / curr_bin_size if curr_bin_size > 0 else 0)
+            return freqs_1hz_inc, psds_binned_1hz
+
+        def create_frequency_domain_features(epoch_data, info, normalize_band_power_within_trials=False):
+            psds, freqs = mne.time_frequency.psd_array_multitaper(epoch_data, info['sfreq'], fmax=36, verbose=False)
+            num_electrodes = len(psds)
+            features_dict = {}
+
+            for j in range(num_electrodes):
+                freqs_binned, psd_binned = bin_power_spectrum_1hz(psds[j], freqs)
+                if normalize_band_power_within_trials:
+                    psd_binned /= sum(psd_binned) if sum(psd_binned)!= 0 else 1
+                for k in range(len(freqs_binned)):
+                    ch_name = info['ch_names'][j]
+                    freq_bin_str = str(freqs_binned[k]) + 'Hz'
+                    band_power = psd_binned[k]
+                    feature_name = f'{ch_name}_{freq_bin_str}'
+                    features_dict[feature_name] = band_power
+
+            return features_dict
+
+        X = epochs.get_data(picks=['eeg'], tmin=0.5)
+        normalize_band_power_within_trials = True
+        X_s = pd.DataFrame([create_frequency_domain_features(epoch_data, epochs.info, normalize_band_power_within_trials) for epoch_data in X])
+        X_s_1 = X_s.filter(regex='C4|A1')
+
+        return X_s_1
+
+    # Handle file uploads and session state
+    if 'uploaded_file' in st.session_state:
+        
+        X_s_1 = process_eeg_data()
+        
+        
+        smote = SMOTE(sampling_strategy = 'all',random_state=42)
+
+        sc = StandardScaler()
+
+        X_s_2 = sc.fit_transform(X_s_1)
+
+
+        if X_s_1 is not None and len(X_s_1) > 0:
+            # Display the DataFrame
+            st.markdown(
+                """
+                <div style='margin-top: 100px; background-color: #000000; padding: 5px; border-radius: 30px;'>
+                    <h1 style='color: #FFA500; text-align: center; margin-top: 40px;'>
+                    EEG data after processing 
+                    </h1>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            
+            
+            st.dataframe(X_s_1.style.set_table_styles(
+                    [{'selector': 'thead th', 
+                    'props': [('font-weight', 'bold'), 
+                                ('color', '#FFA500'), 
+                                ('background-color', '#000000')]}]
+                ))
+            
+            # Load the model and make predictions# Load the model and make predictions
+            try:
+                with open(r'E:\App_Thesis\model\trained_model_best.pkl', 'rb') as file:
+                    loaded_model = pickle.load(file)
+                    
+                    st.markdown(
+                    """
+                    <div style='margin-top: 100px; background-color: #000000; padding: 5px; border-radius: 30px;'>
+                        <h1 style='color: #FFA500; text-align: center; margin-top: 40px;'>
+                        Sleep stages predict
+                        </h1>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                    )
+
+                    predictions = loaded_model.predict(X_s_2)
+                    
+                    # Get the unique labels and their counts
+                    unique, counts = np.unique(predictions, return_counts=True)
+                    
+
+                    # Define a dictionary that maps the integer labels to the corresponding sleep stage labels
+                    label_map = {
+                        0: 'SLEEP-N1',
+                        1: 'SLEEP-N2',
+                        2: 'SLEEP-N3',
+                        3: 'SLEEP-REM'
+                    }
+
+                    # Use the dictionary to map the integer labels to the corresponding sleep stage labels
+                    unique_labels = [label_map[label] for label in unique]
+                    
+                    # Add the predictions to the end of X_s_2
+                    X_s_2_with_predictions = np.c_[X_s_1, predictions]
+
+                    # Rename the last column to "prediction"
+                    column_names = list(X_s_1.columns) + ['Prediction']
+                    X_s_2_with_predictions = pd.DataFrame(X_s_2_with_predictions, columns=column_names)
+
+                    # Replace the integer labels with their corresponding sleep stage labels
+                    X_s_2_with_predictions['Prediction'] = X_s_2_with_predictions['Prediction'].map(label_map)
+
+                    st.write(X_s_2_with_predictions)
+                    
+                    markdown_str = """
+                    <table style="width:100%; border-collapse: collapse; margin-top: 20px; font-size: 22px">
+                    <tr>
+                        <th style="background-color: #FFFACD; padding: 0.5em; word-wrap: break-word; text-align: justify; font-weight: bold; font-family: \"Times New Roman\", Times, serif; font-size: 16px; line-height: 1.9; word-spacing: 9px;">Sleep Stage</th>
+                        <th style="background-color: #FFFACD; padding: 0.5em; word-wrap: break-word; text-align: justify; font-weight: bold; font-family: \"Times New Roman\", Times, serif; font-size: 16px; line-height: 1.9; word-spacing: 9px;">Count</th>
+                    </tr>
+                    """
+
+                    for label, count in zip(unique_labels, counts):
+                        markdown_str += f"""
+                    <tr>
+                        <td style="background-color: #FFFACD; padding: 0.5em; word-wrap: break-word; text-align: justify; font-family: \"Times New Roman\", Times, serif; font-size: 16px; line-height: 1.9; word-spacing: 9px;">{label}</td>
+                        <td style="background-color: #FFFACD; padding: 0.5em; word-wrap: break-word; text-align: justify; font-family: \"Times New Roman\", Times, serif; font-size: 16px; line-height: 1.9; word-spacing: 9px;">{count} stages </td>
+                    </tr>
+                    """
+
+                    markdown_str += """
+                    </table>
+                    """
+
+                    st.markdown(markdown_str, unsafe_allow_html=True)
+                    
+                    # Create a new event_id that unifies stages 3 and 4
+                    event_id = {
+                        'SLEEP-REM': 1,
+                        'SLEEP-N1': 2,
+                        'SLEEP-N2': 3,
+                        'SLEEP-N3': 4
+                    }
+
+                    # Convert the prediction column into an events array
+                    events_sleep = np.zeros((len(predictions), 3), dtype=int)
+                    events_sleep[:, 0] = np.arange(len(predictions))  # sample numbers
+                    events_sleep[:, 2] = [event_id[label_map[label]] for label in predictions]  # event IDs
+
+                    fig, ax = plt.subplots(figsize=(6, 3))  # Adjust the figsize as needed
+                    mne.viz.plot_events(events_sleep, event_id=event_id, sfreq = 128.00, first_samp=events_sleep[0, 0], equal_spacing=True, axes=ax)
+                    st.pyplot(fig)
+
+                    # Keep the color-code for further plotting
+                    stage_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+                                                
+                                        
+                    
+                # st.markdown(
+                # """
+                # <div style='margin-top: 100px; background-color: #000000; padding: 5px; border-radius: 30px;'>
+                #     <h1 style='color: #FFA500; text-align: center; margin-top: 40px;'>
+                #     Sleep stages predict
+                #     </h1>
+                # </div>
+                # """,
+                # unsafe_allow_html=True
+                # )
+
+                # # Print the results
+                # for label, count in zip(unique_labels, counts):
+                #     st.write(f"Number {label}: {count} stages")
+                    
+            except FileNotFoundError:
+                st.error("The trained model file is missing. Please upload the file first.")
+                
+            try:
+                with open(r'E:\App_Thesis\model\best_RF_model.pkl', 'rb') as file:
+                    loaded_model = pickle.load(file)
+
+                # Step 2: Preprocess the CSV file data (if necessary)
+
+                data = X_s_1
+
+                # Upsample the data to have at least 1645 rows
+                current_rows = data.shape[0]
+                rows_needed = max(1645, current_rows)
+                repeat_factor = -(-rows_needed // current_rows)
+
+                # Set random seed for reproducibility
+                random_seed = 42
+                np.random.seed(random_seed)
+
+                upsampled_data = data.sample(frac=repeat_factor, replace=True, random_state=random_seed)
+
+                # Preprocess the upsampled data using a standard scaler
+                scaler = StandardScaler()
+                features_scaled = scaler.fit_transform(upsampled_data)
+
+                # Apply PCA to scaled features with a fixed random seed
+                n_components = 60
+                pca = PCA(n_components=n_components, random_state=random_seed)
+                features_pca = pca.fit_transform(features_scaled)
+
+                # Define a dictionary that maps the integer labels to the corresponding sleep disease labels
+                label_map_2 = {
+                    0: 'Bruxism',
+                    1: 'Insomnia',
+                    2: 'No pathology',
+                    3: 'Narcolepsy',
+                    4: 'Nocturnal frontal lobe epilepsy',
+                    5: 'Periodic leg movements',
+                    6: 'REM behavior disorder',
+                    7: 'Sleep-disordered breathing'
+                }
+
+                # Make predictions using the loaded model and PCA-transformed features
+                predicted_pca = loaded_model.predict(features_pca)
+
+                # Calculate the percentage of each predicted class
+                class_counts_pca = Counter(predicted_pca)
+
+                total_samples_pca = len(predicted_pca)
+
+                st.markdown(
+                    """
+                    <div style='margin-top: 100px; background-color: #000000; padding: 5px; border-radius: 30px;'>
+                        <h1 style='color: #FFA500; text-align: center; margin-top: 40px;'>
+                        Sleep disease predict 
+                        </h1>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                markdown_str = """
+                <table style="width: 100%; border-collapse: collapse; border-radius:20px; margin-top: 20px; font-size: 22px">
+                <tr>
+                    <th style="background-color: #FFFACD; padding: 0.5em; word-wrap: break-word; text-align: justify; font-weight: bold; font-family: \"Times New Roman\", Times, serif; font-size: 16px; line-height: 1.9; word-spacing: 9px;">Disease</th>
+                    <th style="background-color: #FFFACD; padding: 0.5em; word-wrap: break-word; text-align: justify; font-weight: bold; font-family: \"Times New Roman\", Times, serif; font-size: 16px; line-height: 1.9; word-spacing: 9px;">Percentage</th>
+                </tr>
+                """
+
+                for class_label, count in sorted(class_counts_pca.items(), key=lambda x: (x[1] / total_samples_pca) * 100, reverse=True):
+                    percentage_pca = (count / total_samples_pca) * 100
+                    disease_label = label_map_2[class_label]
+                    markdown_str += f"""
+                <tr>
+                    <td style="background-color: #FFFACD; padding: 0.5em; word-wrap: break-word; text-align: justify; font-family: \"Times New Roman\", Times, serif; font-size: 16px; line-height: 1.9; word-spacing: 9px;">{disease_label}</td>
+                    <td style="background-color: #FFFACD; padding: 0.5em; word-wrap: break-word; text-align: justify; font-family: \"Times New Roman\", Times, serif; font-size: 16px; line-height: 1.9; word-spacing: 9px;">{percentage_pca:.2f}%</td>
+                </tr>
+                """
+
+                markdown_str += """
+                </table>
+                """
+
+                st.markdown(markdown_str, unsafe_allow_html=True)
+                
+                # Prepare data for the pie chart
+                target_counts = list(class_counts_pca.values())
+                target_labels = [label_map_2[key] for key in class_counts_pca.keys()]
+                target_percentages = [count / total_samples_pca * 100 for count in target_counts]
+
+                # Create labels with both percentage and count
+                labels = [f'{target_labels[i]}' for i in range(len(target_counts))]
+
+                # Create and display the pie chart
+                fig, ax = plt.subplots(figsize=(4.5, 4.5))
+                ax.pie(target_percentages, labels=labels, autopct='%1.1f%%', startangle= 160)
+                ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+                # plt.title('Percentage of Each Sleep Disease Class')
+
+                st.pyplot(fig)
+
+            except FileNotFoundError:
+                st.error("The trained model file is missing. Please upload the file first.")
+
+        else:
+            st.error("No valid EEG data found in the uploaded file. Please upload a valid file.")
+
+    else:
+        st.error("No file uploaded. Please upload a file first.")
+        
+        
 if selected == "Recommendation":
-    st.title("Here are some suggestions for you !!! ")
+    st.title("Here are some suggestions for you !!!")
+    # Add a button to clear cache
+    if st.button("Clear Cache"):
+        st.cache_data.clear()
+        st.session_state.messages.clear()
+        
+        # Display chat messages
+        # Display chat messages
+    if "messages" not in st.session_state.keys():
+        st.session_state.messages = [{"role": "assistant", "content": "How may I help you?"}]
+
+    if st.session_state.messages:  # Check if messages list is not empty
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.write(message["content"])
+
+    # Function for generating LLM response
+    def generate_response(prompt_input):
+        # Hugging Face Login
+        genai.configure(api_key='AIzaSyBQr8yrACmw0ANADrDGeIJT13-2ZulbR1I')
+        model = genai.GenerativeModel('gemini-pro')
+        
+        # Create ChatBot                        
+        chatbot = model.generate_content(prompt_input)
+        
+        response_text = None
+        
+        # Iterate over chatbot.parts to find the part containing text
+        for part in chatbot.parts:
+            if hasattr(part, 'text'):
+                response_text = part.text
+                break
+
+        # Check if response_text is still None
+        if response_text is None:
+            return "Sorry, I cannot create a response. Please ask more questions!!"
+        else:
+            return response_text
+
+    # User-provided prompt
+    if prompt := st.chat_input("What is up?"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.write(prompt)
+
+    # Generate a new response if there are messages and the last message is not from the assistant
+    if st.session_state.messages and st.session_state.messages[-1]["role"] != "assistant":
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                response = generate_response(prompt) 
+                st.write(response) 
+        message = {"role": "assistant", "content": response}
+        st.session_state.messages.append(message)
