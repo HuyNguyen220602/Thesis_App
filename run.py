@@ -332,7 +332,7 @@ if selected == "Home":
             st.markdown(f"<ul style='margin-top: 15px; background-color: #FFFACD; padding: 1.5em ;border-radius: 2em; word-wrap: break-word; text-align: justify; font-weight: bold; font-family: \"Times New Roman\", Times, serif; font-size: 16px; line-height: 1.9; word-spacing: 9px;'>{text_file_7}</ul>", unsafe_allow_html=True)
 
     with h2: 
-        st.image("https://www.sleepadvisor.org/wp-content/uploads/2021/03/sleep-related-breathing-disorder-and-tips.jpg", caption=None, width=None, use_column_width=None, clamp=False, output_format="auto")
+        st.image("https://www.psychiatrist.com/wp-content/uploads/2024/01/JCP_Sleep-Disordered-Breathing.jpg", caption=None, width=None, use_column_width=None, clamp=False, output_format="auto")
         st.image("https://th.bing.com/th/id/R.caf3f2f57166f8f01de56f553c610b4e?rik=FZtcDQojrFMwNw&riu=http%3a%2f%2fi.ytimg.com%2fvi%2f-gie2dhqP2c%2fmaxresdefault.jpg&ehk=0Z2RChspJXW%2b%2btAujgRUXYDsQ%2bUIg3WzsMeZY8ESN98%3d&risl=&pid=ImgRaw&r=0", caption=None, width=None, use_column_width=None, clamp=False, output_format="auto")
         
                
@@ -1024,7 +1024,7 @@ if selected == "Analysis":
         
         
 if selected == "Recommendation":
-    st.title("Here are some suggestions for you !!!")
+    st.title("ASK FOR ADVICE")
     # Add a button to clear cache
     if st.button("Clear Cache"):
         st.cache_data.clear()
@@ -1064,7 +1064,7 @@ if selected == "Recommendation":
             return response_text
 
     # User-provided prompt
-    if prompt := st.chat_input("What is up?"):
+    if prompt := st.chat_input("Ask me something?"):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.write(prompt)
